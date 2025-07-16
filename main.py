@@ -29,8 +29,7 @@ def main_loop():
         print("[✓] No profitable bets found this cycle.", flush=True)
 
         # Sleep for interval
-        print(f"[…] Sleeping for {SEARCH_INTERVAL_MINUTES} minutes...
-", flush=True)
+        print(f"[…] Sleeping for {SEARCH_INTERVAL_MINUTES} minutes...", flush=True)
         time.sleep(SEARCH_INTERVAL_MINUTES * 60)
 
 if __name__ == "__main__":
