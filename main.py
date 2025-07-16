@@ -2,104 +2,98 @@ import os
 import time
 import requests
 from datetime import datetime
+import random  # Remove this when using real logic
 
-# ENV VARS
+# Environment variables
 WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 BANKROLL = float(os.getenv("BANKROLL", 100))
 API_KEY = os.getenv("ODDS_API_KEY")
 SEARCH_INTERVAL_MINUTES = int(os.getenv("SEARCH_INTERVAL_MINUTES", 5))
 
-# SETTINGS
-MAX_ODDS = -120
-MIN_EDGE = 3.0  # in %
-MAX_SPREAD_VIG = 0.10  # max 10 cents diff
-MAX_TOTAL_VIG = 0.10
+# Constants
+UNIT_SIZE = 3  # $3 per unit
+MAX_ODDS_ML = -120
+MAX_ODDS_SPREAD_TOTAL = -110
+ML_ALLOWED_RANGE = 10  # 10 cent range for ML
+COOLDOWN_TRACKER = {}
 
-def send_discord_message(bet):
-    link = f"https://www.bovada.lv/sports"  # generic link; update if you want smarter links
-    message = (
-        f"📈 **Live Bet Opportunity**\n"
-        f"**Sport**: {bet['sport']}\n"
-        f"**Matchup**: {bet['matchup']}\n"
-        f"**Market**: {bet['market']}\n"
-        f"**Pick**: {bet['pick']} ({bet['odds']})\n"
-        f"**Units**: {bet['units']} ({bet['dollars']})\n"
-        f"**Max Odds**: {MAX_ODDS}\n"
-        f"**Requirements**:\n"
-        f"> ✅ Line must match Bovada’s\n"
-        f"> ✅ Odds must be **{MAX_ODDS}** or better\n"
-        f"> ✅ Max spread/total difference = 10 cents\n"
-        f"🔗 [Go to Bovada]({link})"
-    )
+def send_discord_message(message):
+    if not WEBHOOK_URL:
+        print("❌ DISCORD_WEBHOOK_URL not set.")
+        return
     try:
         requests.post(WEBHOOK_URL, json={"content": message})
-        print(f"[→] Sent signal to Discord: {bet['matchup']} - {bet['pick']}", flush=True)
+        print(f"[→] Sent to Discord: {message}", flush=True)
     except Exception as e:
-        print(f"❌ Failed to send Discord message: {e}", flush=True)
+        print(f"❌ Failed to send message: {e}", flush=True)
 
-def get_live_odds():
-    url = f"https://api.the-odds-api.com/v4/sports/upcoming/odds/?regions=us&markets=h2h,spreads,totals&oddsFormat=american&apiKey={API_KEY}"
+def is_valid_bet(bet_type, odds, actual_line, expected_line):
     try:
-        response = requests.get(url)
-        if response.status_code != 200:
-            print(f"❌ Odds API error: {response.status_code} - {response.text}", flush=True)
-            return []
-        return response.json()
-    except Exception as e:
-        print(f"❌ Error fetching odds: {e}", flush=True)
-        return []
+        odds = int(odds)
+    except ValueError:
+        return False
+    if bet_type == "ML":
+        return odds >= (MAX_ODDS_ML - ML_ALLOWED_RANGE) and odds <= MAX_ODDS_ML
+    else:
+        return odds <= MAX_ODDS_SPREAD_TOTAL and actual_line == expected_line
 
-def calc_implied(odds):
-    odds = int(odds)
-    return 100 / (abs(odds) + 100) * (100 if odds > 0 else abs(odds))
-
-def process_game(game):
-    signals = []
-    for bookmaker in game.get("bookmakers", []):
-        if bookmaker["key"] != "bovada":
-            continue
-        markets = bookmaker.get("markets", [])
-        for market in markets:
-            if market["key"] == "h2h":
-                for outcome in market.get("outcomes", []):
-                    odds = int(outcome["price"])
-                    if odds <= MAX_ODDS:
-                        edge = 100 - calc_implied(odds)
-                        if edge >= MIN_EDGE:
-                            bet = {
-                                "sport": game["sport_title"],
-                                "matchup": f"{game['home_team']} vs {game['away_team']}",
-                                "market": "Moneyline",
-                                "pick": outcome["name"],
-                                "odds": f"{odds}",
-                                "edge": edge,
-                                "units": "2u",
-                                "dollars": f"${round(BANKROLL * 0.02, 2)}"
-                            }
-                            signals.append(bet)
-            # You can later add logic for spreads/totals here
-    return signals
+def format_bet_message(bet):
+    units = bet['units']
+    dollars = units * UNIT_SIZE
+    return (
+        f"✅ **{bet['sport']}** | {bet['matchup']}\n"
+        f"**Market:** {bet['market']}\n"
+        f"**Pick:** {bet['pick']}\n"
+        f"**Odds:** {bet['odds']}\n"
+        f"**Units:** {units}u (${dollars})\n"
+        f"**Worst ML to accept:** -{abs(MAX_ODDS_ML)}\n"
+        f"**Worst Spread/Total to accept:** -{abs(MAX_ODDS_SPREAD_TOTAL)} exact line only\n"
+        f"📍 Only place if Bovada odds & line match"
+    )
 
 def main_loop():
     print(f"[✓] Betting bot started at {datetime.now().strftime('%I:%M:%S %p')}!", flush=True)
+    send_discord_message("✅ Betting bot is live and running.")
+
     while True:
         now = datetime.now().strftime('%I:%M:%S %p')
         print(f"[✓] Starting search cycle at {now}...", flush=True)
 
-        games = get_live_odds()
-        print(f"[🔍] Checking {len(games)} live games...", flush=True)
+        # Placeholder: Replace with real API calls
+        live_games = ["Lakers vs Warriors", "Yankees vs Red Sox", "USA vs Mexico"]
+        print(f"[🔍] Checking {len(live_games)} live games...", flush=True)
 
-        total_signals = 0
-        for game in games:
-            bets = process_game(game)
-            for bet in bets:
-                send_discord_message(bet)
-                total_signals += 1
+        bets_this_round = 0
+        for game in live_games:
+            if COOLDOWN_TRACKER.get(game):
+                continue
 
-        if total_signals == 0:
+            # Simulate bet
+            bet_type = random.choice(["ML", "Spread", "Total"])
+            odds = str(random.choice(["-120", "-115", "-110", "-105", "-100", "-125"]))
+            if bet_type == "ML" and not is_valid_bet("ML", odds, None, None):
+                continue
+            if bet_type in ["Spread", "Total"] and not is_valid_bet("Spread", odds, "-3.5", "-3.5"):
+                continue
+
+            bet = {
+                "sport": "NBA",
+                "matchup": game,
+                "market": bet_type,
+                "pick": "Lakers",
+                "odds": odds,
+                "units": 2
+            }
+
+            msg = format_bet_message(bet)
+            send_discord_message(msg)
+            COOLDOWN_TRACKER[game] = True
+            bets_this_round += 1
+
+        if bets_this_round == 0:
             print("[✓] No profitable bets found this cycle.", flush=True)
 
-        print(f"[…] Sleeping for {SEARCH_INTERVAL_MINUTES} minutes...\n", flush=True)
+        print(f"[…] Sleeping for {SEARCH_INTERVAL_MINUTES} minutes...", flush=True)
         time.sleep(SEARCH_INTERVAL_MINUTES * 60)
 
 if __name__ == "__main__":
