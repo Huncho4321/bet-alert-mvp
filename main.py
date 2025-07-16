@@ -20,7 +20,7 @@ def send_discord_message(message):
 
 def main_loop():
     print(f"[✓] Betting bot started at {datetime.now().strftime('%I:%M:%S %p')}!", flush=True)
-    send_discord_message("✅ Betting bot is live and running.")
+    # send_discord_message("✅ Betting bot is live and running.")
     while True:
         now = datetime.now().strftime('%I:%M:%S %p')
         print(f"[✓] Starting search cycle at {now}...", flush=True)
