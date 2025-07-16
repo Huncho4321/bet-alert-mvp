@@ -43,7 +43,7 @@ def send_to_discord(title, odds, market_type, line, pace_score, url):
                    f"> 📈 Pace: {pace_score}\n"
                    f"> 💰 Bet: {format_units(odds)} (max odds: {MAX_ML_ODDS})\n"
                    f"> 🔗 {url}\n"
-                   f"_Odds must match exactly. Max: 20¢ off ML, exact for spreads/totals._"
+                   f"_Max ML odds: -120 | Spreads/totals must match exactly | ML must be within 20¢_\n"
     }
     try:
         r = requests.post(DISCORD_WEBHOOK, json=msg, timeout=10)
@@ -61,7 +61,7 @@ def should_alert(game_id, market_type):
 
 def scan_games():
     events = get_action_data()
-    print(f"🟢 [{datetime.datetime.now().strftime('%I:%M %p')}] Checking {len(events)} games...")
+    print(f"🟢 [{datetime.datetime.now().strftime('%I:%M:%S %p')}] Checking {len(events)} live games...")
     
     for game in events:
         game_id = game.get("event_id")
@@ -70,7 +70,6 @@ def scan_games():
         url = game.get("links", {}).get("web", {}).get("href", "")
         pace = game.get("pace_score", 0)
 
-        # Example logic — adjust based on market data available
         for market in game.get("markets", []):
             if market.get("period") != "live":
                 continue
@@ -83,12 +82,17 @@ def scan_games():
                 if should_alert(game_id, market_type):
                     send_to_discord(title, odds, "Moneyline", line, pace, url)
             elif market_type in ["spread", "total"]:
-                if abs(float(line)) <= MAX_SPREAD_TOTAL_DIFF and abs(odds) <= MAX_ML_ODDS:
-                    if should_alert(game_id, market_type):
-                        send_to_discord(title, odds, market_type.title(), line, pace, url)
+                try:
+                    if abs(float(line)) <= MAX_SPREAD_TOTAL_DIFF and abs(odds) <= abs(MAX_ML_ODDS):
+                        if should_alert(game_id, market_type):
+                            send_to_discord(title, odds, market_type.title(), line, pace, url)
+                except:
+                    continue
 
-# Main loop
+# LOOP: Every 5 minutes
 if __name__ == "__main__":
     while True:
+        print(f"🔄 [{datetime.datetime.now().strftime('%I:%M:%S %p')}] Starting scan cycle...")
         scan_games()
-        time.sleep(300)  # 5 minutes
+        print(f"⏳ Waiting 5 minutes before next cycle...\n")
+        time.sleep(300)
